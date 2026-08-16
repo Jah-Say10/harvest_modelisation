@@ -1,0 +1,27 @@
+{
+    "district": "DRS",
+    "algorithm": "XGBoost",
+    "rmse": 331.736,
+    "trained_at": "2026-08-14",
+    "training_rows": 378,
+    "version": "1.0.0",
+    "best_params": {
+        "model__colsample_bytree": 0.8,
+        "model__learning_rate": 0.05,
+        "model__max_depth": 3,
+        "model__n_estimators": 500,
+        "model__subsample": 1.0
+    },
+    "features": [
+        "DRS",
+        "PERIODE",
+        "R20_DSME_Femmes enceintes ayant re\u00e7u TPI 2",
+        "temperature_moyenne",
+        "temperature_max",
+        "temperature_min",
+        "precipitation",
+        "humidite",
+        "vent",
+        "rayonnement_solaire"
+    ]
+}

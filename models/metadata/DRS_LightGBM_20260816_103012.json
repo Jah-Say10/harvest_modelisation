@@ -1,0 +1,28 @@
+{
+    "district": "DRS",
+    "algorithm": "LightGBM",
+    "rmse": 78.6673,
+    "trained_at": "2026-08-16",
+    "training_rows": 378,
+    "version": "1.0.0",
+    "best_params": {
+        "model__learning_rate": 0.03,
+        "model__max_depth": 10,
+        "model__min_child_samples": 20,
+        "model__n_estimators": 200,
+        "model__num_leaves": 15,
+        "model__subsample": 0.8
+    },
+    "features": [
+        "DRS",
+        "PERIODE",
+        "Cas Confirm\u00e9s (par TDR) palu consultations externes",
+        "temperature_moyenne",
+        "temperature_max",
+        "temperature_min",
+        "precipitation",
+        "humidite",
+        "vent",
+        "rayonnement_solaire"
+    ]
+}

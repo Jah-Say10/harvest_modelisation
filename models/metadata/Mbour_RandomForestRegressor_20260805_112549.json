@@ -1,0 +1,27 @@
+{
+    "district": "Mbour",
+    "algorithm": "RandomForestRegressor",
+    "accuracy": 91.6405,
+    "trained_at": "2026-08-05",
+    "training_rows": 28,
+    "version": "1.0.0",
+    "best_params": {
+        "max_depth": 5,
+        "min_samples_leaf": 3,
+        "n_estimators": 200
+    },
+    "features": [
+        "lag_1",
+        "lag_2",
+        "lag_3",
+        "lag_4",
+        "lag_5",
+        "lag_6",
+        "lag_7",
+        "lag_8",
+        "lag_9",
+        "lag_10",
+        "lag_11",
+        "lag_12"
+    ]
+}

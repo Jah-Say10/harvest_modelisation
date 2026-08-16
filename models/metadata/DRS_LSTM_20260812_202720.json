@@ -1,0 +1,32 @@
+{
+    "district": "DRS",
+    "algorithm": "LSTM",
+    "accuracy": 90.3535,
+    "trained_at": "2026-08-12",
+    "training_rows": 261,
+    "version": "3.0.0",
+    "best_params": {
+        "window": 6,
+        "architecture": "LSTM",
+        "features": [
+            "temperature_moyenne",
+            "temperature_max",
+            "temperature_min",
+            "precipitation",
+            "humidite",
+            "vent",
+            "rayonnement_solaire",
+            "R20_DSME_Femmes enceintes ayant re\u00e7u TPI 2"
+        ]
+    },
+    "features": [
+        "temperature_moyenne",
+        "temperature_max",
+        "temperature_min",
+        "precipitation",
+        "humidite",
+        "vent",
+        "rayonnement_solaire",
+        "R20_DSME_Femmes enceintes ayant re\u00e7u TPI 2"
+    ]
+}

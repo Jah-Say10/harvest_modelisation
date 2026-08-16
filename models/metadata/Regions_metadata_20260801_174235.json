@@ -1,0 +1,380 @@
+[
+    {
+        "district": "DRS Dakar",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 84.2647,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 5,
+            "min_samples_leaf": 1,
+            "n_estimators": 100
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Diourbel",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 84.8477,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 3,
+            "min_samples_leaf": 3,
+            "n_estimators": 100
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Fatick",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 87.1433,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 3,
+            "min_samples_leaf": 1,
+            "n_estimators": 200
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Kaffrine",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 80.6836,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 10,
+            "min_samples_leaf": 1,
+            "n_estimators": 200
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Kaolack",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 88.2233,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 5,
+            "min_samples_leaf": 1,
+            "n_estimators": 100
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Kedougou",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 88.3549,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 10,
+            "min_samples_leaf": 1,
+            "n_estimators": 200
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Kolda",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 88.397,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 3,
+            "min_samples_leaf": 1,
+            "n_estimators": 200
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Louga",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 87.5385,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 5,
+            "min_samples_leaf": 3,
+            "n_estimators": 200
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Matam",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 87.2725,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 5,
+            "min_samples_leaf": 1,
+            "n_estimators": 200
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Saint-Louis",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 90.8793,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 10,
+            "min_samples_leaf": 1,
+            "n_estimators": 200
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Sedhiou",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 84.6264,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 10,
+            "min_samples_leaf": 1,
+            "n_estimators": 200
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Tambacounda",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 93.7079,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 3,
+            "min_samples_leaf": 3,
+            "n_estimators": 100
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Thies",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 82.6007,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 10,
+            "min_samples_leaf": 1,
+            "n_estimators": 100
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    },
+    {
+        "district": "DRS Ziguinchor",
+        "algorithm": "RandomForestRegressor",
+        "accuracy": 84.6689,
+        "trained_at": "2026-08-01",
+        "training_rows": 28,
+        "version": "1.0.0",
+        "best_params": {
+            "max_depth": 5,
+            "min_samples_leaf": 3,
+            "n_estimators": 100
+        },
+        "features": [
+            "lag_1",
+            "lag_2",
+            "lag_3",
+            "lag_4",
+            "lag_5",
+            "lag_6",
+            "lag_7",
+            "lag_8",
+            "lag_9",
+            "lag_10",
+            "lag_11",
+            "lag_12"
+        ]
+    }
+]

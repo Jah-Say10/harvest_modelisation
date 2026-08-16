@@ -1,0 +1,41 @@
+{
+    "district": "GLOBAL",
+    "algorithm": "RandomForestRegressor",
+    "accuracy": 89.3863,
+    "trained_at": "2026-08-08",
+    "training_rows": 28,
+    "version": "1.0.0",
+    "best_params": {
+        "max_depth": 5,
+        "max_features": "sqrt",
+        "min_samples_split": 2,
+        "n_estimators": 300
+    },
+    "features": [
+        "temperature_moyenne",
+        "temperature_max",
+        "temperature_min",
+        "precipitation",
+        "humidite",
+        "vent",
+        "rayonnement_solaire",
+        "month",
+        "quarter",
+        "year",
+        "lag_1",
+        "lag_2",
+        "lag_3",
+        "lag_4",
+        "lag_5",
+        "lag_6",
+        "lag_7",
+        "lag_8",
+        "lag_9",
+        "lag_10",
+        "lag_11",
+        "lag_12",
+        "rolling_mean_3",
+        "rolling_mean_6",
+        "diff_1"
+    ]
+}
