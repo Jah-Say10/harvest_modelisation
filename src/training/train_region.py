@@ -1285,100 +1285,100 @@ tscv = TimeSeriesSplit(
     n_splits=5
 )
 
-# print("\n" + "=" * 80)
-# print("Random Forest")
-# print("=" * 80)
+print("\n" + "=" * 80)
+print("Random Forest")
+print("=" * 80)
 
-# rf = Pipeline(
-#     steps=[
-#         ("preprocessor", preprocessor),
-#         (
-#             "model",
-#             RandomForestRegressor(
-#                 random_state=42,
-#                 n_jobs=-1
-#             )
-#         )
-#     ]
-# )
+rf = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        (
+            "model",
+            RandomForestRegressor(
+                random_state=42,
+                n_jobs=-1
+            )
+        )
+    ]
+)
 
-# rf_params = {
-#     "model__n_estimators": [
-#         200,
-#         500,
-#         800,
-#         1200
-#     ],
+rf_params = {
+    "model__n_estimators": [
+        200,
+        500,
+        800,
+        1200
+    ],
 
-#     "model__max_depth": [
-#         None,
-#         5,
-#         10,
-#         15,
-#         20,
-#         30,
-#         50
-#     ],
+    "model__max_depth": [
+        None,
+        5,
+        10,
+        15,
+        20,
+        30,
+        50
+    ],
 
-#     "model__min_samples_split": [
-#         2,
-#         5,
-#         10,
-#         15,
-#         20
-#     ],
+    "model__min_samples_split": [
+        2,
+        5,
+        10,
+        15,
+        20
+    ],
 
-#     "model__min_samples_leaf": [
-#         1,
-#         2,
-#         4,
-#         8,
-#         12
-#     ],
+    "model__min_samples_leaf": [
+        1,
+        2,
+        4,
+        8,
+        12
+    ],
 
-#     "model__max_features": [
-#         "sqrt",
-#         "log2",
-#         0.3,
-#         0.5,
-#         0.7,
-#         1.0
-#     ]
-# }
+    "model__max_features": [
+        "sqrt",
+        "log2",
+        0.3,
+        0.5,
+        0.7,
+        1.0
+    ]
+}
 
-# rf_search = GridSearchCV(
-#     estimator=rf,
-#     param_grid=rf_params,
-#     cv=tscv,
-#     scoring="neg_root_mean_squared_error",
-#     n_jobs=-1,
-#     verbose=1
-# )
+rf_search = GridSearchCV(
+    estimator=rf,
+    param_grid=rf_params,
+    cv=tscv,
+    scoring="neg_root_mean_squared_error",
+    n_jobs=-1,
+    verbose=1
+)
 
-# rf_search.fit(
-#     X_train,
-#     y_train
-# )
+rf_search.fit(
+    X_train,
+    y_train
+)
 
-# print("\nBEST RANDOM FOREST PARAMETERS")
-# print(rf_search.best_params_)
+print("\nBEST RANDOM FOREST PARAMETERS")
+print(rf_search.best_params_)
 
-# print("Best CV RMSE:", -rf_search.best_score_)
+print("Best CV RMSE:", -rf_search.best_score_)
 
-# rf_predictions = rf_search.predict(X_test)
+rf_predictions = rf_search.predict(X_test)
 
-# rf_predictions = np.maximum(rf_predictions, 0)
+rf_predictions = np.maximum(rf_predictions, 0)
 
-# rf_mae = mean_absolute_error(y_test, rf_predictions)
+rf_mae = mean_absolute_error(y_test, rf_predictions)
 
-# rf_rmse = np.sqrt(mean_squared_error(y_test, rf_predictions))
+rf_rmse = np.sqrt(mean_squared_error(y_test, rf_predictions))
 
-# rf_smape = smape(y_test.to_numpy(), rf_predictions)
+rf_smape = smape(y_test.to_numpy(), rf_predictions)
 
-# print("\nRANDOM FOREST TEST")
-# print("MAE:", rf_mae)
-# print("RMSE:", rf_rmse)
-# print("sMAPE:", rf_smape)
+print("\nRANDOM FOREST TEST")
+print("MAE:", rf_mae)
+print("RMSE:", rf_rmse)
+print("sMAPE:", rf_smape)
 
 # # Plot Test
 # plot_model_predictions(
@@ -1629,155 +1629,155 @@ print(
 # LightGBM
 # ===================================================
 
-# print("\n" + "=" * 80)
-# print("LightGBM")
-# print("=" * 80)
+print("\n" + "=" * 80)
+print("LightGBM")
+print("=" * 80)
 
-# lgbm = Pipeline(
-#     steps=[
-#         ("preprocessor", preprocessor),
-#         (
-#             "model",
-#             LGBMRegressor(
-#                 objective="regression",
-#                 random_state=42,
-#                 verbosity=-1,
-#                 n_jobs=-1
-#             )
-#         )
-#     ]
-# )
+lgbm = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        (
+            "model",
+            LGBMRegressor(
+                objective="regression",
+                random_state=42,
+                verbosity=-1,
+                n_jobs=-1
+            )
+        )
+    ]
+)
 
-# lgbm_params = {
-#     "model__n_estimators": [
-#         200,
-#         500,
-#         800,
-#         1200
-#     ],
+lgbm_params = {
+    "model__n_estimators": [
+        200,
+        500,
+        800,
+        1200
+    ],
 
-#     "model__learning_rate": [
-#         0.01,
-#         0.02,
-#         0.03,
-#         0.05,
-#         0.07,
-#         0.1,
-#         0.15
-#     ],
+    "model__learning_rate": [
+        0.01,
+        0.02,
+        0.03,
+        0.05,
+        0.07,
+        0.1,
+        0.15
+    ],
 
-#     "model__num_leaves": [
-#         7,
-#         15,
-#         31,
-#         47,
-#         63,
-#         127
-#     ],
+    "model__num_leaves": [
+        7,
+        15,
+        31,
+        47,
+        63,
+        127
+    ],
 
-#     "model__max_depth": [
-#         -1,
-#         3,
-#         5,
-#         7,
-#         10,
-#         15
-#     ],
+    "model__max_depth": [
+        -1,
+        3,
+        5,
+        7,
+        10,
+        15
+    ],
 
-#     "model__min_child_samples": [
-#         5,
-#         10,
-#         20,
-#         30,
-#         40,
-#         60
-#     ],
+    "model__min_child_samples": [
+        5,
+        10,
+        20,
+        30,
+        40,
+        60
+    ],
 
-#     "model__subsample": [
-#         0.6,
-#         0.7,
-#         0.8,
-#         0.9,
-#         1.0
-#     ],
+    "model__subsample": [
+        0.6,
+        0.7,
+        0.8,
+        0.9,
+        1.0
+    ],
 
-#     "model__colsample_bytree": [
-#         0.6,
-#         0.7,
-#         0.8,
-#         0.9,
-#         1.0
-#     ],
+    "model__colsample_bytree": [
+        0.6,
+        0.7,
+        0.8,
+        0.9,
+        1.0
+    ],
 
-#     "model__reg_alpha": [
-#         0,
-#         0.01,
-#         0.1,
-#         1.0
-#     ],
+    "model__reg_alpha": [
+        0,
+        0.01,
+        0.1,
+        1.0
+    ],
 
-#     "model__reg_lambda": [
-#         0,
-#         0.1,
-#         1.0,
-#         5.0,
-#         10.0
-#     ]
-# }
+    "model__reg_lambda": [
+        0,
+        0.1,
+        1.0,
+        5.0,
+        10.0
+    ]
+}
 
-# lgbm_search = GridSearchCV(
-#     lgbm,
-#     lgbm_params,
-#     cv=tscv,
-#     scoring="neg_root_mean_squared_error",
-#     n_jobs=-1,
-#     verbose=1
-# )
+lgbm_search = GridSearchCV(
+    lgbm,
+    lgbm_params,
+    cv=tscv,
+    scoring="neg_root_mean_squared_error",
+    n_jobs=-1,
+    verbose=1
+)
 
-# lgbm_search.fit(
-#     X_train,
-#     y_train
-# )
+lgbm_search.fit(
+    X_train,
+    y_train
+)
 
-# print("\nBEST LIGHTGBM PARAMETERS")
-# print(lgbm_search.best_params_)
+print("\nBEST LIGHTGBM PARAMETERS")
+print(lgbm_search.best_params_)
 
-# lgbm_predictions = lgbm_search.predict(
-#     X_test
-# )
+lgbm_predictions = lgbm_search.predict(
+    X_test
+)
 
-# lgbm_predictions = np.maximum(
-#     lgbm_predictions,
-#     0
-# )
+lgbm_predictions = np.maximum(
+    lgbm_predictions,
+    0
+)
 
-# print("\nLIGHTGBM TEST")
+print("\nLIGHTGBM TEST")
 
-# print(
-#     "MAE:",
-#     mean_absolute_error(
-#         y_test,
-#         lgbm_predictions
-#     )
-# )
+print(
+    "MAE:",
+    mean_absolute_error(
+        y_test,
+        lgbm_predictions
+    )
+)
 
-# print(
-#     "RMSE:",
-#     np.sqrt(
-#         mean_squared_error(
-#             y_test,
-#             lgbm_predictions
-#         )
-#     )
-# )
+print(
+    "RMSE:",
+    np.sqrt(
+        mean_squared_error(
+            y_test,
+            lgbm_predictions
+        )
+    )
+)
 
-# print(
-#     "sMAPE:",
-#     smape(
-#         y_test.to_numpy(),
-#         lgbm_predictions
-#     )
-# )
+print(
+    "sMAPE:",
+    smape(
+        y_test.to_numpy(),
+        lgbm_predictions
+    )
+)
 
 # # Plot Test
 # plot_model_predictions(
@@ -1830,100 +1830,100 @@ print(
 # CatBoost
 # ===================================================
 
-# print("\n" + "=" * 80)
-# print("CatBoost")
-# print("=" * 80)
+print("\n" + "=" * 80)
+print("CatBoost")
+print("=" * 80)
 
-# cat_features = [
-#     X_train.columns.get_loc("DRS")
-# ]
+cat_features = [
+    X_train.columns.get_loc("DRS")
+]
 
-# catboost_model = CatBoostRegressor(
-#     loss_function="RMSE",
-#     random_seed=42,
-#     verbose=False
-# )
+catboost_model = CatBoostRegressor(
+    loss_function="RMSE",
+    random_seed=42,
+    verbose=False
+)
 
-# catboost_params = {
-#     "iterations": [
-#         300,
-#         600
-#     ],
+catboost_params = {
+    "iterations": [
+        300,
+        600
+    ],
 
-#     "depth": [
-#         4,
-#         6,
-#         8
-#     ],
+    "depth": [
+        4,
+        6,
+        8
+    ],
 
-#     "learning_rate": [
-#         0.03,
-#         0.05,
-#         0.1
-#     ],
+    "learning_rate": [
+        0.03,
+        0.05,
+        0.1
+    ],
 
-#     "l2_leaf_reg": [
-#         1,
-#         3,
-#         5,
-#         10
-#     ]
-# }
+    "l2_leaf_reg": [
+        1,
+        3,
+        5,
+        10
+    ]
+}
 
-# catboost_search = GridSearchCV(
-#     catboost_model,
-#     catboost_params,
-#     cv=tscv,
-#     scoring="neg_root_mean_squared_error",
-#     n_jobs=-1,
-#     verbose=1
-# )
+catboost_search = GridSearchCV(
+    catboost_model,
+    catboost_params,
+    cv=tscv,
+    scoring="neg_root_mean_squared_error",
+    n_jobs=-1,
+    verbose=1
+)
 
-# catboost_search.fit(
-#     X_train,
-#     y_train,
-#     cat_features=cat_features
-# )
+catboost_search.fit(
+    X_train,
+    y_train,
+    cat_features=cat_features
+)
 
-# print("\nBEST CATBOOST PARAMETERS")
-# print(catboost_search.best_params_)
+print("\nBEST CATBOOST PARAMETERS")
+print(catboost_search.best_params_)
 
-# cat_predictions = catboost_search.predict(
-#     X_test
-# )
+cat_predictions = catboost_search.predict(
+    X_test
+)
 
-# cat_predictions = np.maximum(
-#     cat_predictions,
-#     0
-# )
+cat_predictions = np.maximum(
+    cat_predictions,
+    0
+)
 
-# print("\nCATBOOST TEST")
+print("\nCATBOOST TEST")
 
-# print(
-#     "MAE:",
-#     mean_absolute_error(
-#         y_test,
-#         cat_predictions
-#     )
-# )
+print(
+    "MAE:",
+    mean_absolute_error(
+        y_test,
+        cat_predictions
+    )
+)
 
-# print(
-#     "RMSE:",
-#     np.sqrt(
-#         mean_squared_error(
-#             y_test,
-#             cat_predictions
-#         )
-#     )
-# )
+print(
+    "RMSE:",
+    np.sqrt(
+        mean_squared_error(
+            y_test,
+            cat_predictions
+        )
+    )
+)
 
-# print(
-#     "sMAPE:",
-#     smape(
-#         y_test.to_numpy(),
-#         cat_predictions
-#     )
-# )
+print(
+    "sMAPE:",
+    smape(
+        y_test.to_numpy(),
+        cat_predictions
+    )
+)
 
 # # Plot historical and prediction
 # ml_full = create_ml_features(df)
@@ -1966,143 +1966,143 @@ print(
 # SVR
 # ===================================================
 
-# print("\n" + "=" * 80)
-# print("SVR")
-# print("=" * 80)
+print("\n" + "=" * 80)
+print("SVR")
+print("=" * 80)
 
-# svr_preprocessor = ColumnTransformer(
-#     transformers=[
-#         (
-#             "cat",
-#             OneHotEncoder(
-#                 handle_unknown="ignore"
-#             ),
-#             ["DRS"]
-#         ),
-#         (
-#             "num",
-#             StandardScaler(),
-#             numeric_features
-#         )
-#     ]
-# )
+svr_preprocessor = ColumnTransformer(
+    transformers=[
+        (
+            "cat",
+            OneHotEncoder(
+                handle_unknown="ignore"
+            ),
+            ["DRS"]
+        ),
+        (
+            "num",
+            StandardScaler(),
+            numeric_features
+        )
+    ]
+)
 
-# svr = Pipeline(
-#     steps=[
-#         (
-#             "preprocessor",
-#             svr_preprocessor
-#         ),
-#         (
-#             "model",
-#             SVR()
-#         )
-#     ]
-# )
+svr = Pipeline(
+    steps=[
+        (
+            "preprocessor",
+            svr_preprocessor
+        ),
+        (
+            "model",
+            SVR()
+        )
+    ]
+)
 
-# svr_params = {
-#     "model__kernel": [
-#         "rbf",
-#         "linear",
-#         "poly",
-#         "sigmoid"
-#     ],
+svr_params = {
+    "model__kernel": [
+        "rbf",
+        "linear",
+        "poly",
+        "sigmoid"
+    ],
 
-#     "model__C": [
-#         0.01,
-#         0.1,
-#         0.5,
-#         1,
-#         5,
-#         10,
-#         50,
-#         100,
-#         500,
-#         1000
-#     ],
+    "model__C": [
+        0.01,
+        0.1,
+        0.5,
+        1,
+        5,
+        10,
+        50,
+        100,
+        500,
+        1000
+    ],
 
-#     "model__epsilon": [
-#         0.001,
-#         0.01,
-#         0.05,
-#         0.1,
-#         0.2,
-#         0.3,
-#         0.5
-#     ],
+    "model__epsilon": [
+        0.001,
+        0.01,
+        0.05,
+        0.1,
+        0.2,
+        0.3,
+        0.5
+    ],
 
-#     "model__gamma": [
-#         "scale",
-#         "auto",
-#         0.001,
-#         0.01,
-#         0.05,
-#         0.1,
-#         0.5,
-#         1
-#     ],
+    "model__gamma": [
+        "scale",
+        "auto",
+        0.001,
+        0.01,
+        0.05,
+        0.1,
+        0.5,
+        1
+    ],
 
-#     "model__degree": [
-#         2,
-#         3,
-#         4,
-#         5
-#     ]
-# }
+    "model__degree": [
+        2,
+        3,
+        4,
+        5
+    ]
+}
 
-# svr_search = GridSearchCV(
-#     svr,
-#     svr_params,
-#     cv=tscv,
-#     scoring="neg_root_mean_squared_error",
-#     n_jobs=-1,
-#     verbose=1
-# )
+svr_search = GridSearchCV(
+    svr,
+    svr_params,
+    cv=tscv,
+    scoring="neg_root_mean_squared_error",
+    n_jobs=-1,
+    verbose=1
+)
 
-# svr_search.fit(
-#     X_train,
-#     y_train
-# )
+svr_search.fit(
+    X_train,
+    y_train
+)
 
-# print("\nBEST SVR PARAMETERS")
-# print(svr_search.best_params_)
+print("\nBEST SVR PARAMETERS")
+print(svr_search.best_params_)
 
-# svr_predictions = svr_search.predict(
-#     X_test
-# )
+svr_predictions = svr_search.predict(
+    X_test
+)
 
-# svr_predictions = np.maximum(
-#     svr_predictions,
-#     0
-# )
+svr_predictions = np.maximum(
+    svr_predictions,
+    0
+)
 
-# print("\nSVR TEST")
+print("\nSVR TEST")
 
-# print(
-#     "MAE:",
-#     mean_absolute_error(
-#         y_test,
-#         svr_predictions
-#     )
-# )
+print(
+    "MAE:",
+    mean_absolute_error(
+        y_test,
+        svr_predictions
+    )
+)
 
-# print(
-#     "RMSE:",
-#     np.sqrt(
-#         mean_squared_error(
-#             y_test,
-#             svr_predictions
-#         )
-#     )
-# )
+print(
+    "RMSE:",
+    np.sqrt(
+        mean_squared_error(
+            y_test,
+            svr_predictions
+        )
+    )
+)
 
-# print(
-#     "sMAPE:",
-#     smape(
-#         y_test.to_numpy(),
-#         svr_predictions
-#     )
-# )
+print(
+    "sMAPE:",
+    smape(
+        y_test.to_numpy(),
+        svr_predictions
+    )
+)
 
 # Plot Test
 # plot_model_predictions(

@@ -331,6 +331,98 @@ def validate_weather(
 
     return weather
 
+# ============================================================
+# ALERT THRESHOLD
+# ============================================================
+
+def calculate_alert_threshold(
+    history,
+    drs,
+    std_multiplier=2
+):
+    """
+    Calculate the malaria alert threshold for a DRS.
+
+    Threshold = mean historical cases
+                + std_multiplier * standard deviation
+
+    Parameters
+    ----------
+    history : pd.DataFrame
+        Historical dataframe.
+
+    drs : str
+        DRS name.
+
+    std_multiplier : float
+        Number of standard deviations used for the threshold.
+        Common choices:
+            1 = sensitive
+            2 = moderate
+            3 = conservative
+
+    Returns
+    -------
+    mean_value : float
+    std_value : float
+    threshold : float
+    """
+
+    region_history = history[
+        history["DRS"] == drs
+    ][TARGET].dropna()
+
+    if region_history.empty:
+        raise ValueError(
+            f"No historical target data found for DRS '{drs}'."
+        )
+
+    mean_value = region_history.mean()
+    std_value = region_history.std()
+
+    threshold = (
+        mean_value
+        + std_multiplier * std_value
+    )
+
+    return (
+        float(mean_value),
+        float(std_value),
+        float(threshold)
+    )
+    
+# ============================================================
+# DETECT ALERT PERIODS
+# ============================================================
+
+def detect_alerts(
+    forecast,
+    threshold
+):
+    """
+    Identify forecast periods where the predicted
+    malaria cases exceed the alert threshold.
+
+    Parameters
+    ----------
+    forecast : pd.DataFrame
+        Output of predict_region().
+
+    threshold : float
+        Alert threshold.
+
+    Returns
+    -------
+    alerts : pd.DataFrame
+        Periods exceeding the threshold.
+    """
+
+    alerts = forecast[
+        forecast["prediction"] > threshold
+    ].copy()
+
+    return alerts
+
 
 # ============================================================
 # PREDICTION
@@ -688,10 +780,9 @@ def save_forecast(
 
 if __name__ == "__main__":
 
-    # Example future weather
-    #
-    # Replace these values with actual forecast/
-    # supplied weather values.
+    # --------------------------------------------------------
+    # Future weather
+    # --------------------------------------------------------
 
     weather_df = pd.DataFrame({
         "PERIODE": pd.date_range(
@@ -709,22 +800,122 @@ if __name__ == "__main__":
         "rayonnement_solaire": np.zeros(12),
     })
 
+    # --------------------------------------------------------
+    # Parameters
+    # --------------------------------------------------------
+
+    DRS = "DRS Dakar"
+
+    START_DATE = "2025-01-01"
+    END_DATE = "2025-12-01"
+
+    STD_MULTIPLIER = 2
+
+    # --------------------------------------------------------
+    # Load history
+    # --------------------------------------------------------
+
+    history = load_history()
+
+    # --------------------------------------------------------
+    # Calculate threshold
+    # --------------------------------------------------------
+
+    mean_value, std_value, threshold = (
+        calculate_alert_threshold(
+            history=history,
+            drs=DRS,
+            std_multiplier=STD_MULTIPLIER
+        )
+    )
+
+    # --------------------------------------------------------
+    # Prediction
+    # --------------------------------------------------------
+
     forecast = predict_region(
-        drs="DRS Dakar",
-        start_date="2025-01-01",
-        end_date="2025-12-01",
+        drs=DRS,
+        start_date=START_DATE,
+        end_date=END_DATE,
         weather_df=weather_df
     )
 
-    print(
-        "\nREGIONAL FORECAST"
+    # --------------------------------------------------------
+    # Detect alerts
+    # --------------------------------------------------------
+
+    alerts = detect_alerts(
+        forecast=forecast,
+        threshold=threshold
     )
 
+    # ========================================================
+    # DISPLAY FORECAST
+    # ========================================================
+
+    print("\n========================================")
+    print("REGIONAL MALARIA FORECAST")
+    print("========================================")
+
     print(
-        forecast.to_string(
-            index=False
-        )
+        forecast.to_string(index=False)
     )
+
+    # ========================================================
+    # DISPLAY THRESHOLD
+    # ========================================================
+
+    # print("\n========================================")
+    # print("ALERT THRESHOLD")
+    # print("========================================")
+
+    # print(
+    #     f"Historical mean       : {mean_value:.2f}"
+    # )
+
+    # print(
+    #     f"Historical std        : {std_value:.2f}"
+    # )
+
+    # print(
+    #     f"Standard deviation    : {STD_MULTIPLIER}"
+    # )
+
+    # print(
+    #     f"Alert threshold       : {threshold:.2f}"
+    # )
+
+    # ========================================================
+    # DISPLAY ALERTS
+    # ========================================================
+
+    print("\n========================================")
+    print("MALARIA ALERTS")
+    print("========================================")
+
+    if alerts.empty:
+
+        print(
+            "No forecast period exceeds the alert threshold."
+        )
+
+    else:
+
+        print(
+            f"{len(alerts)} period(s) exceed "
+            f"the alert threshold:\n"
+        )
+
+        for _, row in alerts.iterrows():
+
+            print(
+                f"ALERT | "
+                f"{row['PERIODE'].strftime('%Y-%m-%d')} | "
+                f"Predicted cases: "
+                f"{row['prediction']:.2f} | "
+                f"Threshold: "
+                f"{threshold:.2f}"
+            )
     
 # ============================================================
 # TODO - MODELISATION UNIQUEMENT
