@@ -11,7 +11,7 @@ from datetime import datetime
 def save_metadata(
     district,
     algorithm,
-    rmse,
+    metrics,
     training_rows,
     version,
     best_params,
@@ -23,7 +23,7 @@ def save_metadata(
     metadata = {
         "district": district,
         "algorithm": algorithm,
-        "rmse": round(float(rmse), 4),
+        "metrics": metrics,
         "trained_at": datetime.now().strftime("%Y-%m-%d"),
         "training_rows": training_rows,
         "version": version,
