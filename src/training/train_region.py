@@ -1288,7 +1288,48 @@ registry_snapshot = {
     "version": VERSION,
     "date": datetime.now().strftime("%Y-%m-%d"),
     "trained_at": datetime.now().isoformat(),
+
     "best_ml_model": best_ml_name,
+
+    # =========================
+    # MODEL CONFIGURATION
+    # =========================
+
+    "target": target,
+
+    "feature_columns": feature_cols,
+
+    "categorical_features": categorical_features,
+
+    "numeric_features": numeric_features,
+
+    "weather_variables": meteo_vars,
+
+    "lags": LAGS,
+
+    "rolling_features": [
+        "target_roll_mean_3",
+        "target_roll_mean_6"
+    ],
+
+    # =========================
+    # DATA PERIODS
+    # =========================
+
+    "train_period": {
+        "start": str(ml_train["PERIODE"].min()),
+        "end": str(ml_train["PERIODE"].max())
+    },
+
+    "test_period": {
+        "start": str(ml_test["PERIODE"].min()),
+        "end": str(ml_test["PERIODE"].max())
+    },
+
+    # =========================
+    # METRICS
+    # =========================
+
     "best_ml_metrics": {
         "MAE": float(best_ml_result["MAE"]),
         "RMSE": float(best_ml_result["RMSE"]),
@@ -1297,9 +1338,9 @@ registry_snapshot = {
         "Accuracy": float(best_ml_result["Accuracy"]),
         "R2": float(best_ml_result["R2"])
     },
+
     "all_ml_results": (
-        ml_results_df
-        .to_dict(orient="records")
+        ml_results_df.to_dict(orient="records")
     )
 }
 

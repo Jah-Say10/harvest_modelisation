@@ -1,5 +1,5 @@
 # ============================================================
-# python -m training.train_region
+# python -m training.train_region_gpu
 #
 # GLOBAL REGIONAL MALARIA FORECASTING
 #
@@ -1011,7 +1011,7 @@ print("=" * 80)
 # Time-series-aware cross-validation
 # ------------------------------------------------------------
 
-tscv = TimeSeriesSplit(n_splits=5)
+tscv = TimeSeriesSplit(n_splits=3)
 
 # ------------------------------------------------------------
 # ML models and hyperparameter grids
@@ -1173,151 +1173,151 @@ ml_specs = {
                 10
             ]
         }
-    },
+    }
 
 
     # ============================================================
     # LIGHTGBM - GPU
     # ============================================================
-    "LightGBM": {
+    # "LightGBM": {
 
-        "estimator": LGBMRegressor(
-            random_state=RANDOM_STATE,
-            verbose=-1,
+    #     "estimator": LGBMRegressor(
+    #         random_state=RANDOM_STATE,
+    #         verbose=-1,
 
-            # GPU. Requires a CUDA-enabled LightGBM installation.
-            # If your LightGBM build only supports OpenCL, change
-            # this to device="gpu".
-            device="cuda",
+    #         # GPU. Requires a CUDA-enabled LightGBM installation.
+    #         # If your LightGBM build only supports OpenCL, change
+    #         # this to device="gpu".
+    #         device="cuda",
 
-            n_jobs=4
-        ),
+    #         n_jobs=4
+    #     ),
 
-        "param_grid": {
+    #     "param_grid": {
 
-            "model__n_estimators": [
-                300,
-                500,
-                800,
-                1200,
-                1600
-            ],
+    #         "model__n_estimators": [
+    #             300,
+    #             500,
+    #             800,
+    #             1200,
+    #             1600
+    #         ],
 
-            "model__learning_rate": [
-                0.01,
-                0.02,
-                0.03,
-                0.05,
-                0.08,
-                0.1,
-                0.15
-            ],
+    #         "model__learning_rate": [
+    #             0.01,
+    #             0.02,
+    #             0.03,
+    #             0.05,
+    #             0.08,
+    #             0.1,
+    #             0.15
+    #         ],
 
-            "model__num_leaves": [
-                7,
-                15,
-                31,
-                63,
-                127,
-                255
-            ],
+    #         "model__num_leaves": [
+    #             7,
+    #             15,
+    #             31,
+    #             63,
+    #             127,
+    #             255
+    #         ],
 
-            "model__max_depth": [
-                -1,
-                3,
-                5,
-                7,
-                10,
-                15
-            ],
+    #         "model__max_depth": [
+    #             -1,
+    #             3,
+    #             5,
+    #             7,
+    #             10,
+    #             15
+    #         ],
 
-            "model__min_child_samples": [
-                5,
-                10,
-                20,
-                30,
-                50,
-                100
-            ],
+    #         "model__min_child_samples": [
+    #             5,
+    #             10,
+    #             20,
+    #             30,
+    #             50,
+    #             100
+    #         ],
 
-            "model__subsample": [
-                0.6,
-                0.7,
-                0.8,
-                0.9,
-                1.0
-            ],
+    #         "model__subsample": [
+    #             0.6,
+    #             0.7,
+    #             0.8,
+    #             0.9,
+    #             1.0
+    #         ],
 
-            "model__colsample_bytree": [
-                0.6,
-                0.7,
-                0.8,
-                0.9,
-                1.0
-            ],
+    #         "model__colsample_bytree": [
+    #             0.6,
+    #             0.7,
+    #             0.8,
+    #             0.9,
+    #             1.0
+    #         ],
 
-            "model__reg_alpha": [
-                0,
-                0.01,
-                0.1,
-                1.0
-            ],
+    #         "model__reg_alpha": [
+    #             0,
+    #             0.01,
+    #             0.1,
+    #             1.0
+    #         ],
 
-            "model__reg_lambda": [
-                0,
-                0.1,
-                1,
-                5,
-                10
-            ]
-        }
-    },
+    #         "model__reg_lambda": [
+    #             0,
+    #             0.1,
+    #             1,
+    #             5,
+    #             10
+    #         ]
+    #     }
+    # },
 
 
     # ============================================================
     # SVR
     # ============================================================
-    "SVR": {
+    # "SVR": {
 
-        "estimator": SVR(),
+    #     "estimator": SVR(),
 
-        "param_grid": {
+    #     "param_grid": {
 
-            "model__C": [
-                0.01,
-                0.1,
-                1,
-                10,
-                100,
-                300,
-                1000
-            ],
+    #         "model__C": [
+    #             0.01,
+    #             0.1,
+    #             1,
+    #             10,
+    #             100,
+    #             300,
+    #             1000
+    #         ],
 
-            "model__epsilon": [
-                0.001,
-                0.01,
-                0.05,
-                0.1,
-                0.2,
-                0.5,
-                1.0
-            ],
+    #         "model__epsilon": [
+    #             0.001,
+    #             0.01,
+    #             0.05,
+    #             0.1,
+    #             0.2,
+    #             0.5,
+    #             1.0
+    #         ],
 
-            "model__gamma": [
-                "scale",
-                "auto",
-                0.001,
-                0.01,
-                0.05,
-                0.1,
-                0.5
-            ],
+    #         "model__gamma": [
+    #             "scale",
+    #             "auto",
+    #             0.001,
+    #             0.01,
+    #             0.05,
+    #             0.1,
+    #             0.5
+    #         ],
 
-            "model__kernel": [
-                "rbf"
-            ]
-        }
-    }
+    #         "model__kernel": [
+    #             "rbf"
+    #         ]
+    #     }
+    # }
 }
 
 # ============================================================
@@ -1536,7 +1536,48 @@ registry_snapshot = {
     "version": VERSION,
     "date": datetime.now().strftime("%Y-%m-%d"),
     "trained_at": datetime.now().isoformat(),
+
     "best_ml_model": best_ml_name,
+
+    # =========================
+    # MODEL CONFIGURATION
+    # =========================
+
+    "target": target,
+
+    "feature_columns": feature_cols,
+
+    "categorical_features": categorical_features,
+
+    "numeric_features": numeric_features,
+
+    "weather_variables": meteo_vars,
+
+    "lags": LAGS,
+
+    "rolling_features": [
+        "target_roll_mean_3",
+        "target_roll_mean_6"
+    ],
+
+    # =========================
+    # DATA PERIODS
+    # =========================
+
+    "train_period": {
+        "start": str(ml_train["PERIODE"].min()),
+        "end": str(ml_train["PERIODE"].max())
+    },
+
+    "test_period": {
+        "start": str(ml_test["PERIODE"].min()),
+        "end": str(ml_test["PERIODE"].max())
+    },
+
+    # =========================
+    # METRICS
+    # =========================
+
     "best_ml_metrics": {
         "MAE": float(best_ml_result["MAE"]),
         "RMSE": float(best_ml_result["RMSE"]),
@@ -1545,12 +1586,11 @@ registry_snapshot = {
         "Accuracy": float(best_ml_result["Accuracy"]),
         "R2": float(best_ml_result["R2"])
     },
+
     "all_ml_results": (
-        ml_results_df
-        .to_dict(orient="records")
+        ml_results_df.to_dict(orient="records")
     )
 }
-
 
 metadata_path = (REGISTRY_DIR_META / f"summary_{VERSION}.json")
 
