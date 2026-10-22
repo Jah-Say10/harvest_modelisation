@@ -83,21 +83,27 @@ METEO_VARS = [
 ]
 
 # ============================================================
-# REDUCED SEARCH SPACES
-#   RF  : 2*3*3*3       =  54 combos x 3 folds = 162 fits
-#   XGB : 2*2*2*2*2*2   =  64 combos x 3 folds = 192 fits
+# AGGRESSIVE SEARCH SPACES — 30,006 TOTAL CV FITS
+#   RF  : 1,080 combos x 3 folds x 3 targets = 9,720 fits
+#   XGB : 2,254 combos x 3 folds x 3 targets = 20,286 fits
+#   TOTAL                                      = 30,006 fits
 # ============================================================
 
 SEARCH_SPACES = {
     "RandomForest": {
-        "estimator": RandomForestRegressor(random_state=RANDOM_STATE, n_jobs=-1),
+        "estimator": RandomForestRegressor(
+            random_state=RANDOM_STATE,
+            n_jobs=-1,
+        ),
         "param_grid": {
-            "model__n_estimators": [300, 600],
-            "model__max_depth": [None, 10, 20],
+            "model__n_estimators": [200, 400, 600, 800, 1000],
+            "model__max_depth": [None, 8, 12, 16, 20, 30],
+            "model__min_samples_split": [2, 5, 10, 15],
             "model__min_samples_leaf": [1, 2, 4],
-            "model__max_features": [0.5, 1.0, "sqrt"],
+            "model__max_features": [0.3, 0.5, 0.7, 1.0],
         },
     },
+
     "XGBoost": {
         "estimator": XGBRegressor(
             random_state=RANDOM_STATE,
@@ -107,12 +113,13 @@ SEARCH_SPACES = {
             n_jobs=XGB_N_JOBS,
         ),
         "param_grid": {
-            "model__n_estimators": [300, 600],
-            "model__max_depth": [3, 5],
-            "model__learning_rate": [0.03, 0.1],
-            "model__min_child_weight": [1, 5],
-            "model__subsample": [0.8, 1.0],
-            "model__colsample_bytree": [0.8, 1.0],
+            "model__n_estimators": [200, 400, 600, 800, 1000],
+            "model__max_depth": [2, 3, 4, 5, 6, 7],
+            "model__learning_rate": [0.01, 0.02, 0.03, 0.05, 0.1],
+            "model__min_child_weight": [1, 3, 5, 7],
+            "model__subsample": [0.7, 0.85, 1.0],
+            "model__colsample_bytree": [0.7, 0.85, 1.0],
+            "model__reg_lambda": [1, 5, 10],
         },
     },
 }
