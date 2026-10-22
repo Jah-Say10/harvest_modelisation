@@ -73,7 +73,6 @@ from lightgbm import LGBMRegressor
 from utils.sort_year import sort_and_replace
 from utils.save_metadata import save_metadata
 
-
 # ============================================================
 # RANDOM SEEDS
 # ============================================================
@@ -85,10 +84,8 @@ np.random.seed(42)
 # CONFIGURATION
 # ============================================================
 
-DATA_PATH = "../data/features/Base_MALARIA_CS_CLEAN_2021_2024_with_weather.xlsx"
-
-DATA_PATH_TEST = "../data/features/Base_MALARIA_CS_CLEAN_2025_with_weather.xlsx"
-
+DATA_PATH = "../data/features/Base_MALARIA_2021_2024_CLEAN_with_weather.xlsx"
+DATA_PATH_TEST = "../data/features/Base_MALARIA_2025_CLEAN_with_weather.xlsx"
 
 REGISTRY_DIR = Path("../models/registry")
 REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
@@ -101,8 +98,13 @@ REGISTRY_DIR_META.mkdir(parents=True, exist_ok=True)
 # TARGET
 # ============================================================
 
-target = "Cas Confirmés (par TDR) palu consultations externes"
-
+# Cas confirmes
+target1 = "Cas Confirmés (par TDR) palu consultations externes"
+# Depistage
+target2_f = "TDR positifs DSDOM Feminin"
+target2_h = "TDR positifs DSDOM Masculin"
+# Stock approvisionnements reçus
+target3 = "Palu:ACT NRSS-Stock reçu"
 
 # ============================================================
 # WEATHER VARIABLES

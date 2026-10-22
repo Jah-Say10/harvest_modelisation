@@ -1,118 +1,40 @@
 # ============================================================
 # python -m training.train_region_gpu
 #
-# GLOBAL REGIONAL MALARIA FORECASTING
+# REGIONAL MALARIA FORECASTING - 3 MODELS (ML only)
+#   1. confirmed  : confirmed cases (TDR, outpatient)
+#   2. screening  : DSDOM positive TDR (female + male)
+#   3. stock      : ACT stock received
 #
-# MACHINE LEARNING ONLY
-#    - Random Forest
-#    - XGBoost
-#    - LightGBM
-#    - SVR
-#
-# Workflow:
-#    1. Load train/test data
-#    2. Aggregate data by DRS/month
-#    3. Create ML features
-#    4. Split train/test
-#    5. Grid search ML models
-#    6. Evaluate models on 2025 test set
-#    7. Select best ML model by RMSE
-#    8. Plot best model predictions
-#    9. Save best model + metadata
-#
+# Models searched: RandomForest, XGBoost (reduced grid)
+# Logs: console + file in ../models/metadata/logs/
 # ============================================================
 
-import pandas as pd
-import numpy as np
-
-import matplotlib.pyplot as plt
-
-from pathlib import Path
-from datetime import datetime
-
-import pickle
 import json
+import logging
+import pickle
+import sys
+import time
 import warnings
+from datetime import datetime
+from pathlib import Path
+
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from sklearn.base import clone
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import ParameterGrid, TimeSeriesSplit
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
+from tqdm.auto import tqdm
+from xgboost import XGBRegressor
 
 warnings.filterwarnings("ignore")
-
-
-# ============================================================
-# MACHINE LEARNING
-# ============================================================
-
-from sklearn.ensemble import RandomForestRegressor
-
-from sklearn.model_selection import (
-    TimeSeriesSplit,
-    GridSearchCV
-)
-
-from sklearn.preprocessing import OneHotEncoder
-
-from sklearn.compose import ColumnTransformer
-
-from sklearn.pipeline import Pipeline
-
-from sklearn.metrics import (
-    mean_absolute_error,
-    mean_squared_error,
-    r2_score
-)
-
-from sklearn.svm import SVR
-
-from xgboost import XGBRegressor
-from lightgbm import LGBMRegressor
-
-
-# ============================================================
-# GPU CONFIGURATION
-# ============================================================
-# XGBoost GPU training uses CUDA. Standard scikit-learn
-# RandomForestRegressor and SVR remain CPU-based.
-#
-# IMPORTANT:
-# GridSearchCV is deliberately limited to one parallel job
-# because several simultaneous GPU fits can exhaust VRAM.
-# ============================================================
-
-XGB_DEVICE = "cuda"
-GPU_GRID_N_JOBS = 1
-CPU_GRID_N_JOBS = -1
-
-try:
-    import torch
-
-    GPU_AVAILABLE = torch.cuda.is_available()
-
-    if GPU_AVAILABLE:
-        print("\nGPU detected:")
-        print("GPU:", torch.cuda.get_device_name(0))
-        print("CUDA:", torch.version.cuda)
-    else:
-        print("\nWARNING: CUDA GPU was not detected.")
-        print("XGBoost will need to be changed to CPU mode if CUDA is unavailable.")
-
-except ImportError:
-    GPU_AVAILABLE = None
-    print("\nPyTorch is not installed; GPU detection will be handled by XGBoost.")
-
-
-# ============================================================
-# PROJECT UTILITIES
-# ============================================================
-
-from utils.sort_year import sort_and_replace
-from utils.save_metadata import save_metadata
-
-
-# ============================================================
-# RANDOM SEEDS
-# ============================================================
-
-np.random.seed(42)
-
+matplotlib.use("Agg")  # plots are saved to disk, never block the run
 
 # ============================================================
 # CONFIGURATION
@@ -121,1514 +43,393 @@ np.random.seed(42)
 DATA_PATH = "../data/features/Base_MALARIA_CS_CLEAN_2021_2024_with_weather.xlsx"
 DATA_PATH_TEST = "../data/features/Base_MALARIA_CS_CLEAN_2025_with_weather.xlsx"
 
-
 REGISTRY_DIR = Path("../models/registry")
-REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
-
 REGISTRY_DIR_META = Path("../models/metadata")
-REGISTRY_DIR_META.mkdir(parents=True, exist_ok=True)
+LOG_DIR = REGISTRY_DIR_META / "logs"
+for d in (REGISTRY_DIR, REGISTRY_DIR_META, LOG_DIR):
+    d.mkdir(parents=True, exist_ok=True)
 
-
-# ============================================================
-# TARGET
-# ============================================================
-
-target = "Cas Confirmés (par TDR) palu consultations externes"
-
-
-# ============================================================
-# WEATHER VARIABLES
-# ============================================================
-
-meteo_vars = [
-    "temperature_moyenne",
-    "temperature_max",
-    "temperature_min",
-    "precipitation",
-    "humidite",
-    "vent",
-    "rayonnement_solaire"
-]
-
-
-# ============================================================
-# GLOBAL PARAMETERS
-# ============================================================
-
-# Number of target lags used as ML features
-LAGS = [1, 2, 3, 6, 12]
-
-# Random seed
-RANDOM_STATE = 42
-
-# Training version
 VERSION = "1.0.0"
+RANDOM_STATE = 42
+LAGS = [1, 2, 3, 6, 12]
+CV_SPLITS = 3
 
+# With only a few hundred rows (DRS x month) the GPU is often SLOWER than
+# the CPU for XGBoost (transfer overhead). Try "cpu" and compare timings.
+XGB_DEVICE = "cuda"          # "cuda" or "cpu"
+XGB_N_JOBS = 4
 
-# ============================================================
-# 1. LOAD TRAIN / TEST DATA SEPARATELY
-# ============================================================
+# Also save a copy of the best model refit on train + 2025 (for deployment)
+REFIT_ON_ALL = True
 
-print("\n" + "=" * 80)
-print("1. LOAD TRAIN / TEST DATA")
-print("=" * 80)
+np.random.seed(RANDOM_STATE)
 
+# Targets: key -> column used (target2 is built as female + male)
+COL_T1 = "Cas Confirmés (par TDR) palu consultations externes"
+COL_T2_F = "TDR positifs DSDOM Feminin"
+COL_T2_H = "TDR positifs DSDOM Masculin"
+COL_T2 = "TDR positifs DSDOM Total"          # created below
+COL_T3 = "Palu:ACT NRSS-Stock reçu"
 
-train_raw = pd.read_excel(DATA_PATH)
-test_raw = pd.read_excel(DATA_PATH_TEST)
-
-
-print("Train raw:", train_raw.shape)
-print("Test raw :", test_raw.shape)
-
-
-print("\nTrain periods:")
-print(train_raw["PERIODE"].unique())
-
-
-print("\nTest periods:")
-print(test_raw["PERIODE"].unique())
-
-
-# ============================================================
-# 2. AGGREGATE TRAIN / TEST DATA
-# ============================================================
-
-print("\n" + "=" * 80)
-print("2. AGGREGATE TRAIN / TEST DATA")
-print("=" * 80)
-
-
-agg_dict = {
-    target: "sum",
-    **{
-        col: "mean"
-        for col in meteo_vars
-        if col in train_raw.columns
-    }
+TARGETS = {
+    "confirmed": COL_T1,
+    "screening": COL_T2,
+    "stock": COL_T3,
 }
 
+METEO_VARS = [
+    "temperature_moyenne", "temperature_max", "temperature_min",
+    "precipitation", "humidite", "vent", "rayonnement_solaire",
+]
 
-# ------------------------------------------------------------
-# Training data: 2021-2024
-# ------------------------------------------------------------
+# ============================================================
+# REDUCED SEARCH SPACES
+#   RF  : 2*3*3*3       =  54 combos x 3 folds = 162 fits
+#   XGB : 2*2*2*2*2*2   =  64 combos x 3 folds = 192 fits
+# ============================================================
 
-train_df = (
-    train_raw
-    .groupby(["DRS", "PERIODE"])
-    .agg(agg_dict)
-    .reset_index()
-)
+SEARCH_SPACES = {
+    "RandomForest": {
+        "estimator": RandomForestRegressor(random_state=RANDOM_STATE, n_jobs=-1),
+        "param_grid": {
+            "model__n_estimators": [300, 600],
+            "model__max_depth": [None, 10, 20],
+            "model__min_samples_leaf": [1, 2, 4],
+            "model__max_features": [0.5, 1.0, "sqrt"],
+        },
+    },
+    "XGBoost": {
+        "estimator": XGBRegressor(
+            random_state=RANDOM_STATE,
+            objective="reg:squarederror",
+            tree_method="hist",
+            device=XGB_DEVICE,
+            n_jobs=XGB_N_JOBS,
+        ),
+        "param_grid": {
+            "model__n_estimators": [300, 600],
+            "model__max_depth": [3, 5],
+            "model__learning_rate": [0.03, 0.1],
+            "model__min_child_weight": [1, 5],
+            "model__subsample": [0.8, 1.0],
+            "model__colsample_bytree": [0.8, 1.0],
+        },
+    },
+}
 
+# ============================================================
+# LOGGING
+# ============================================================
 
-# ------------------------------------------------------------
-# Test data: 2025
-# ------------------------------------------------------------
+run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_file = LOG_DIR / f"train_{VERSION}_{run_id}.log"
 
-test_df = (
-    test_raw
-    .groupby(["DRS", "PERIODE"])
-    .agg(agg_dict)
-    .reset_index()
-)
-
-
-# ------------------------------------------------------------
-# Convert periods to datetime
-# ------------------------------------------------------------
-
-train_df["PERIODE"] = pd.to_datetime(train_df["PERIODE"])
-
-test_df["PERIODE"] = pd.to_datetime(test_df["PERIODE"])
-
-
-# ------------------------------------------------------------
-# Sort
-# ------------------------------------------------------------
-
-train_df = (
-    train_df
-    .sort_values(["DRS", "PERIODE"])
-    .reset_index(drop=True)
-)
-
-test_df = (
-    test_df
-    .sort_values(["DRS", "PERIODE"])
-    .reset_index(drop=True)
-)
-
-
-print("Aggregated train:", train_df.shape)
-print("Aggregated test :", test_df.shape)
-
-
-print("\nTrain period:")
-print(train_df["PERIODE"].min(), "->", train_df["PERIODE"].max())
+logger = logging.getLogger("malaria")
+logger.setLevel(logging.INFO)
+logger.handlers.clear()
+fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s", "%H:%M:%S")
+for h in (logging.StreamHandler(sys.stdout), logging.FileHandler(log_file, encoding="utf-8")):
+    h.setFormatter(fmt)
+    logger.addHandler(h)
 
 
-print("\nTest period:")
-print(test_df["PERIODE"].min(), "->", test_df["PERIODE"].max())
-
-
-print("\nRegions:")
-print(train_df["DRS"].unique())
+def fmt_secs(s):
+    s = int(s)
+    return f"{s // 3600:d}h{(s % 3600) // 60:02d}m{s % 60:02d}s"
 
 
 # ============================================================
-# 3. DEFINE TRAIN / TEST PERIODS
+# GPU CHECK
 # ============================================================
 
-print("\n" + "=" * 80)
-print("3. TRAIN / TEST SPLIT")
-print("=" * 80)
-
-
-TRAIN_END = train_df["PERIODE"].max()
-
-TEST_START = test_df["PERIODE"].min()
-TEST_END = test_df["PERIODE"].max()
-
-
-print("Training:", train_df["PERIODE"].min(), "->", TRAIN_END)
-
-print("Testing :", TEST_START, "->", TEST_END)
-
-print("Train:", train_df.shape)
-print("Test :", test_df.shape)
-
+try:
+    import torch
+    if torch.cuda.is_available():
+        logger.info(f"GPU detected: {torch.cuda.get_device_name(0)} (CUDA {torch.version.cuda})")
+    else:
+        logger.warning("No CUDA GPU detected -> set XGB_DEVICE = 'cpu'")
+except ImportError:
+    logger.info("PyTorch not installed; GPU detection left to XGBoost.")
 
 # ============================================================
-# 4. COMBINE FOR FEATURE ENGINEERING
-# ============================================================
-#
-# IMPORTANT:
-#
-# We combine 2021-2024 + 2025 BEFORE creating lag features.
-#
-# This allows:
-#
-# January 2025 lag_1  -> December 2024
-# January 2025 lag_2  -> November 2024
-# ...
-# January 2025 lag_12 -> January 2024
-#
-# Therefore, 2025 features use historical 2021-2024
-# observations and do not use future 2025 target values.
-#
-# The actual 2025 target remains out-of-sample.
+# 1. LOAD DATA
 # ============================================================
 
-
-all_df = pd.concat(
-    [train_df, test_df],
-    axis=0,
-    ignore_index=True
-)
-
-
-all_df = (
-    all_df
-    .sort_values(["DRS", "PERIODE"])
-    .reset_index(drop=True)
-)
-
-
-print("\nCombined dataset for feature engineering:")
-print(all_df.shape)
+logger.info("=" * 70)
+logger.info("STEP 1/4 - Loading data")
+train_raw = pd.read_excel(DATA_PATH)
+test_raw = pd.read_excel(DATA_PATH_TEST)
+for raw in (train_raw, test_raw):
+    raw[COL_T2] = raw[COL_T2_F].fillna(0) + raw[COL_T2_H].fillna(0)
+logger.info(f"Train raw: {train_raw.shape} | Test raw: {test_raw.shape}")
 
 
 # ============================================================
-# 5. CREATE ML FEATURES
+# HELPERS
 # ============================================================
 
-
-def create_ml_features(dataframe):
-
-    data = dataframe.copy()
-
-    data = (
-        data
-        .sort_values(["DRS", "PERIODE"])
-        .reset_index(drop=True)
-    )
+def aggregate(raw, target):
+    agg = {target: "sum", **{c: "mean" for c in METEO_VARS if c in raw.columns}}
+    df = raw.groupby(["DRS", "PERIODE"]).agg(agg).reset_index()
+    df["PERIODE"] = pd.to_datetime(df["PERIODE"])
+    return df.sort_values(["DRS", "PERIODE"]).reset_index(drop=True)
 
 
-    # --------------------------------------------------------
-    # Target lags
-    # --------------------------------------------------------
-
+def create_ml_features(df, target):
+    data = df.sort_values(["DRS", "PERIODE"]).reset_index(drop=True)
+    g = data.groupby("DRS")[target]
     for lag in LAGS:
-
-        data[f"target_lag_{lag}"] = (
-            data
-            .groupby("DRS")[target]
-            .shift(lag)
-        )
-
-
-    # --------------------------------------------------------
-    # Rolling features
-    # --------------------------------------------------------
-
-    data["target_roll_mean_3"] = (
-        data
-        .groupby("DRS")[target]
-        .transform(
-            lambda x: x.shift(1).rolling(3).mean()
-        )
-    )
-
-
-    data["target_roll_mean_6"] = (
-        data
-        .groupby("DRS")[target]
-        .transform(
-            lambda x: x.shift(1).rolling(6).mean()
-        )
-    )
-
-
-    # --------------------------------------------------------
-    # Calendar features
-    # --------------------------------------------------------
-
+        data[f"target_lag_{lag}"] = g.shift(lag)
+    data["target_roll_mean_3"] = g.transform(lambda x: x.shift(1).rolling(3).mean())
+    data["target_roll_mean_6"] = g.transform(lambda x: x.shift(1).rolling(6).mean())
     data["month"] = data["PERIODE"].dt.month
-
-    data["year"] = data["PERIODE"].dt.year
-
-
-    # --------------------------------------------------------
-    # Cyclic month encoding
-    # --------------------------------------------------------
-
     data["month_sin"] = np.sin(2 * np.pi * data["month"] / 12)
-
     data["month_cos"] = np.cos(2 * np.pi * data["month"] / 12)
-
-
     return data
 
 
-ml_df = create_ml_features(all_df)
-
-
-print("\nFeature-engineered dataset:")
-print(ml_df.head())
-print(ml_df.shape)
-
-
-# ============================================================
-# 6. REMOVE ROWS WITHOUT REQUIRED LAGS
-# ============================================================
-
-ml_df = ml_df.dropna().copy()
-
-
-print("\nAfter dropping missing lag/rolling values:")
-print(ml_df.shape)
-
-
-# ============================================================
-# 7. SEPARATE TRAIN / TEST AGAIN
-# ============================================================
-
-
-ml_train = ml_df[
-    ml_df["PERIODE"] <= TRAIN_END
-].copy()
-
-
-ml_test = ml_df[
-    (ml_df["PERIODE"] >= TEST_START)
-    &
-    (ml_df["PERIODE"] <= TEST_END)
-].copy()
-
-
-print("\nML train:", ml_train.shape)
-print("ML test :", ml_test.shape)
-
-
-print("\nML train period:",
-      ml_train["PERIODE"].min(),
-      "->",
-      ml_train["PERIODE"].max())
-
-
-print("ML test period :",
-      ml_test["PERIODE"].min(),
-      "->",
-      ml_test["PERIODE"].max())
-
-
-# ============================================================
-# 8. DEFINE ML FEATURES
-# ============================================================
-
-
-feature_cols = [
-
-    "DRS",
-
-    # Weather
-    "temperature_moyenne",
-    "temperature_max",
-    "temperature_min",
-    "precipitation",
-    "humidite",
-    "vent",
-    "rayonnement_solaire",
-
-    # Target lags
-    "target_lag_1",
-    "target_lag_2",
-    "target_lag_3",
-    "target_lag_6",
-    "target_lag_12",
-
-    # Rolling features
-    "target_roll_mean_3",
-    "target_roll_mean_6",
-
-    # Calendar
-    "month",
-    "year",
-
-    # Cyclic month
-    "month_sin",
-    "month_cos"
-]
-
-
-# Keep only columns that actually exist
-feature_cols = [
-    col
-    for col in feature_cols
-    if col in ml_df.columns
-]
-
-
-print("\nML features:")
-print(feature_cols)
-
-
-# ============================================================
-# 9. X / y
-# ============================================================
-
-
-X_train = ml_train[feature_cols]
-y_train = ml_train[target]
-
-X_test = ml_test[feature_cols]
-y_test = ml_test[target]
-
-
-print("\nX_train:", X_train.shape)
-print("y_train:", y_train.shape)
-
-print("X_test :", X_test.shape)
-print("y_test :", y_test.shape)
-
-
-# ============================================================
-# 10. ONE-HOT ENCODE DRS
-# ============================================================
-
-
-categorical_features = ["DRS"]
-
-
-numeric_features = [
-    col
-    for col in feature_cols
-    if col not in categorical_features
-]
-
-
-preprocessor = ColumnTransformer(
-    transformers=[
-        (
-            "cat",
-            OneHotEncoder(handle_unknown="ignore"),
-            categorical_features
-        ),
-        (
-            "num",
-            "passthrough",
-            numeric_features
-        )
-    ]
-)
-
-
-# ============================================================
-# 11. METRICS
-# ============================================================
-
-
 def smape(y_true, y_pred):
-    """
-    Symmetric Mean Absolute Percentage Error (sMAPE).
-    """
-
-    y_true = np.asarray(y_true, dtype=float)
-
-    y_pred = np.asarray(y_pred, dtype=float)
-
-    denominator = np.abs(y_true) + np.abs(y_pred)
-
-    mask = denominator != 0
-
-    if not mask.any():
-        return np.nan
-
-    return (
-        100
-        * np.mean(
-            2
-            * np.abs(y_pred[mask] - y_true[mask])
-            / denominator[mask]
-        )
-    )
+    y_true, y_pred = np.asarray(y_true, float), np.asarray(y_pred, float)
+    den = np.abs(y_true) + np.abs(y_pred)
+    m = den != 0
+    return np.nan if not m.any() else 100 * np.mean(2 * np.abs(y_pred[m] - y_true[m]) / den[m])
 
 
-def evaluate_model(
-    model,
-    X_train,
-    y_train,
-    X_test,
-    y_test,
-    model_name
-):
-
-    print("\n" + "=" * 80)
-    print(model_name)
-    print("=" * 80)
-
-
-    # --------------------------------------------------------
-    # Train final model
-    # --------------------------------------------------------
-
-    model.fit(X_train, y_train)
-
-
-    # --------------------------------------------------------
-    # Predictions
-    # --------------------------------------------------------
-
-    predictions = model.predict(X_test)
-
-
-    # --------------------------------------------------------
-    # Prevent negative predictions
-    # --------------------------------------------------------
-
-    predictions = np.maximum(predictions, 0)
-
-
-    # --------------------------------------------------------
-    # MAE
-    # --------------------------------------------------------
-
-    mae = mean_absolute_error(y_test, predictions)
-
-
-    # --------------------------------------------------------
-    # RMSE
-    # --------------------------------------------------------
-
-    rmse = np.sqrt(
-        mean_squared_error(y_test, predictions)
-    )
-
-
-    # --------------------------------------------------------
-    # sMAPE
-    # --------------------------------------------------------
-
-    smape_value = smape(y_test.to_numpy(), predictions)
-
-
-    # --------------------------------------------------------
-    # R²
-    # --------------------------------------------------------
-
-    r2 = r2_score(y_test, predictions)
-
-
-    # --------------------------------------------------------
-    # MAPE
-    # --------------------------------------------------------
-
-    y_true = y_test.to_numpy()
-
+def metrics(y_true, y_pred):
+    y_true = np.asarray(y_true, float)
     mask = y_true != 0
-
-    if mask.any():
-
-        mape = (
-            100
-            * np.mean(
-                np.abs(
-                    (
-                        y_true[mask]
-                        -
-                        predictions[mask]
-                    )
-                    /
-                    y_true[mask]
-                )
-            )
-        )
-
-        accuracy = max(0, 100 - mape)
-
-    else:
-
-        mape = np.nan
-        accuracy = np.nan
-
-
-    # --------------------------------------------------------
-    # Print metrics
-    # --------------------------------------------------------
-
-    print(f"MAE      : {mae:.4f}")
-
-    print(f"RMSE     : {rmse:.4f}")
-
-    print(f"sMAPE    : {smape_value:.2f}%")
-
-    print(f"MAPE     : {mape:.2f}%")
-
-    print(f"Accuracy : {accuracy:.2f}%")
-
-    print(f"R²       : {r2:.4f}")
-
-
+    mape = 100 * np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) if mask.any() else np.nan
     return {
-        "model": model_name,
-        "MAE": mae,
-        "RMSE": rmse,
-        "sMAPE": smape_value,
+        "MAE": mean_absolute_error(y_true, y_pred),
+        "RMSE": float(np.sqrt(mean_squared_error(y_true, y_pred))),
+        "sMAPE": smape(y_true, y_pred),
         "MAPE": mape,
-        "Accuracy": accuracy,
-        "R2": r2,
-        "model_object": model,
-        "predictions": predictions
+        "R2": r2_score(y_true, y_pred),
     }
 
 
-# ============================================================
-# 12. PLOT FUNCTION
-# ============================================================
-
-
-def plot_model_predictions(
-    full_df,
-    test_df,
-    predictions,
-    model_name,
-    target,
-    test_start,
-    save_plot=False
-):
+def period_splits(df, n_splits):
     """
-    Plot historical target values and test predictions
-    for every DRS separately.
-
-    Parameters
-    ----------
-    full_df : pd.DataFrame
-        Complete historical dataframe.
-
-    test_df : pd.DataFrame
-        Test dataframe.
-
-    predictions : array-like
-        Predictions corresponding to test_df rows.
-
-    model_name : str
-        Name of the model.
-
-    target : str
-        Target column.
-
-    test_start : datetime
-        Beginning of test period.
-
-    save_plot : bool, default=False
-        If True, save each DRS plot as a PNG in:
-
-        ../models/registry/Plot_DRS_currentdate/
+    Time-based CV splits on UNIQUE PERIODS (all DRS of a month stay together).
+    A plain TimeSeriesSplit on rows sorted by DRS would split by region, not by time.
     """
+    periods = np.sort(df["PERIODE"].unique())
+    for tr_p, va_p in TimeSeriesSplit(n_splits=n_splits).split(periods):
+        tr_idx = np.where(df["PERIODE"].isin(periods[tr_p]))[0]
+        va_idx = np.where(df["PERIODE"].isin(periods[va_p]))[0]
+        yield tr_idx, va_idx
 
 
-    # --------------------------------------------------------
-    # Prepare output directory
-    # --------------------------------------------------------
+def grid_search(name, pipeline, param_grid, X, y, splits, tag):
+    """Manual grid search so we can log real progress + ETA."""
+    combos = list(ParameterGrid(param_grid))
+    n = len(combos)
+    logger.info(f"[{tag}] {name}: {n} combos x {len(splits)} folds = {n * len(splits)} fits")
 
-    if save_plot:
+    best_rmse, best_params = np.inf, None
+    t0 = time.time()
+    log_every = max(1, n // 10)
 
-        current_date = pd.Timestamp.today().strftime("%Y-%m-%d")
+    with tqdm(total=n, desc=f"{tag} | {name}", unit="combo", dynamic_ncols=True) as pbar:
+        for i, params in enumerate(combos, 1):
+            fold_rmse = []
+            for tr_idx, va_idx in splits:
+                model = clone(pipeline).set_params(**params)
+                model.fit(X.iloc[tr_idx], y.iloc[tr_idx])
+                pred = np.maximum(model.predict(X.iloc[va_idx]), 0)
+                fold_rmse.append(np.sqrt(mean_squared_error(y.iloc[va_idx], pred)))
+            cv_rmse = float(np.mean(fold_rmse))
+            if cv_rmse < best_rmse:
+                best_rmse, best_params = cv_rmse, params
+                logger.info(f"[{tag}] {name} new best CV RMSE {best_rmse:.3f} (combo {i}/{n})")
 
-        output_dir = (
-            Path("../models/registry")
-            /
-            f"Plot_DRS_{current_date}"
-        )
-
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-
-    # --------------------------------------------------------
-    # Prepare test predictions
-    # --------------------------------------------------------
-
-    plot_test = test_df[
-        ["DRS", "PERIODE", target]
-    ].copy()
-
-
-    plot_test["prediction"] = np.asarray(predictions)
-
-    plot_test["PERIODE"] = pd.to_datetime(plot_test["PERIODE"])
-
-
-    plot_test = (
-        plot_test
-        .sort_values(["DRS", "PERIODE"])
-    )
+            elapsed = time.time() - t0
+            eta = elapsed / i * (n - i)
+            pbar.set_postfix(best=f"{best_rmse:.2f}", eta=fmt_secs(eta))
+            pbar.update(1)
+            if i % log_every == 0 or i == n:
+                logger.info(
+                    f"[{tag}] {name} {i}/{n} ({100 * i / n:.0f}%) | "
+                    f"best CV RMSE {best_rmse:.3f} | elapsed {fmt_secs(elapsed)} | ETA {fmt_secs(eta)}"
+                )
+    return best_params, best_rmse
 
 
-    # --------------------------------------------------------
-    # One plot for each DRS
-    # --------------------------------------------------------
-
-    regions = (
-        plot_test["DRS"]
-        .dropna()
-        .unique()
-    )
-
-
-    for region in regions:
-
-        historical = (
-            full_df[
-                full_df["DRS"] == region
-            ]
-            .copy()
-            .sort_values("PERIODE")
-        )
-
-
-        historical["PERIODE"] = pd.to_datetime(
-            historical["PERIODE"]
-        )
-
-
-        test_region = (
-            plot_test[
-                plot_test["DRS"] == region
-            ]
-            .sort_values("PERIODE")
-        )
-
-
-        # ----------------------------------------------------
-        # Create figure
-        # ----------------------------------------------------
-
+def plot_predictions(full_df, test_df, preds, model_name, target, tag, test_start, out_dir):
+    plot_test = test_df[["DRS", "PERIODE", target]].copy()
+    plot_test["prediction"] = np.asarray(preds)
+    for region in plot_test["DRS"].dropna().unique():
+        hist = full_df[full_df["DRS"] == region].sort_values("PERIODE")
+        tr = plot_test[plot_test["DRS"] == region].sort_values("PERIODE")
         plt.figure(figsize=(14, 7))
-
-
-        # ----------------------------------------------------
-        # Historical values
-        # ----------------------------------------------------
-
-        plt.plot(
-            historical["PERIODE"],
-            historical[target],
-            color="black",
-            linewidth=2,
-            label="Historical"
-        )
-
-
-        # ----------------------------------------------------
-        # Test actual values
-        # ----------------------------------------------------
-
-        plt.plot(
-            test_region["PERIODE"],
-            test_region[target],
-            color="royalblue",
-            linewidth=2.5,
-            marker="o",
-            markersize=5,
-            label="Test actual"
-        )
-
-
-        # ----------------------------------------------------
-        # Test predictions
-        # ----------------------------------------------------
-
-        plt.plot(
-            test_region["PERIODE"],
-            test_region["prediction"],
-            color="red",
-            linewidth=2.5,
-            linestyle="--",
-            marker="o",
-            markersize=5,
-            label=f"{model_name} prediction"
-        )
-
-
-        # ----------------------------------------------------
-        # Test-period boundary
-        # ----------------------------------------------------
-
-        plt.axvline(
-            test_start,
-            color="gray",
-            linestyle=":",
-            linewidth=2,
-            label="Test start"
-        )
-
-
-        # ----------------------------------------------------
-        # Shading test period
-        # ----------------------------------------------------
-
-        plt.axvspan(
-            test_start,
-            historical["PERIODE"].max(),
-            color="orange",
-            alpha=0.08
-        )
-
-
-        # ----------------------------------------------------
-        # Titles and labels
-        # ----------------------------------------------------
-
-        plt.title(
-            f"{model_name} — {region}",
-            fontsize=16,
-            fontweight="bold"
-        )
-
-
-        plt.xlabel("PERIODE", fontsize=12)
-
-        plt.ylabel(target, fontsize=12)
-
-
-        # ----------------------------------------------------
-        # Grid
-        # ----------------------------------------------------
-
+        plt.plot(hist["PERIODE"], hist[target], color="black", lw=2, label="Historical")
+        plt.plot(tr["PERIODE"], tr[target], color="royalblue", lw=2.5, marker="o", ms=5, label="Test actual")
+        plt.plot(tr["PERIODE"], tr["prediction"], color="red", lw=2.5, ls="--", marker="o", ms=5,
+                 label=f"{model_name} prediction")
+        plt.axvline(test_start, color="gray", ls=":", lw=2, label="Test start")
+        plt.axvspan(test_start, hist["PERIODE"].max(), color="orange", alpha=0.08)
+        plt.title(f"[{tag}] {model_name} — {region}", fontsize=16, fontweight="bold")
+        plt.xlabel("PERIODE")
+        plt.ylabel(target)
         plt.grid(True, alpha=0.25)
-
-
-        # ----------------------------------------------------
-        # Legend
-        # ----------------------------------------------------
-
-        plt.legend(loc="best", frameon=True)
-
-
-        # ----------------------------------------------------
-        # Layout
-        # ----------------------------------------------------
-
+        plt.legend(loc="best")
         plt.tight_layout()
-
-
-        # ----------------------------------------------------
-        # Save plot
-        # ----------------------------------------------------
-
-        if save_plot:
-
-            safe_model_name = (
-                str(model_name)
-                .replace("/", "_")
-                .replace("\\", "_")
-                .replace(" ", "_")
-            )
-
-
-            safe_region = (
-                str(region)
-                .replace("/", "_")
-                .replace("\\", "_")
-                .replace(" ", "_")
-            )
-
-
-            filename = (
-                f"{safe_model_name}_"
-                f"{safe_region}_"
-                f"test_predictions.png"
-            )
-
-
-            filepath = output_dir / filename
-
-
-            plt.savefig(
-                filepath,
-                dpi=300,
-                bbox_inches="tight"
-            )
-
-
-        plt.show()
-
-
-        # Close figure to avoid accumulating figures
+        safe = str(region).replace("/", "_").replace("\\", "_").replace(" ", "_")
+        plt.savefig(out_dir / f"{model_name}_{safe}.png", dpi=200, bbox_inches="tight")
         plt.close()
 
 
 # ============================================================
-# 13. MACHINE LEARNING — GRID SEARCH
+# 2. TRAIN ONE TARGET
 # ============================================================
 
-print("\n" + "=" * 80)
-print("13. MACHINE LEARNING MODELS — GRID SEARCH")
-print("=" * 80)
+def run_target(tag, target):
+    t_start = time.time()
+    logger.info("=" * 70)
+    logger.info(f"TARGET '{tag}' -> {target}")
+    logger.info("=" * 70)
 
+    # --- aggregate + features ---------------------------------
+    logger.info(f"[{tag}] Aggregating by DRS/month and building features")
+    train_df = aggregate(train_raw, target)
+    test_df = aggregate(test_raw, target)
+    train_end = train_df["PERIODE"].max()
+    test_start, test_end = test_df["PERIODE"].min(), test_df["PERIODE"].max()
 
-# ------------------------------------------------------------
-# Time-series-aware cross-validation
-# ------------------------------------------------------------
+    # Concatenate so early-2025 lags can look back into 2024
+    all_df = pd.concat([train_df, test_df], ignore_index=True).sort_values(["DRS", "PERIODE"]).reset_index(drop=True)
+    ml_df = create_ml_features(all_df, target)
 
-tscv = TimeSeriesSplit(n_splits=3)
+    # "year" removed: trees cannot extrapolate to an unseen year (2025)
+    feature_cols = (
+        ["DRS"]
+        + [c for c in METEO_VARS if c in ml_df.columns]
+        + [f"target_lag_{l}" for l in LAGS]
+        + ["target_roll_mean_3", "target_roll_mean_6", "month", "month_sin", "month_cos"]
+    )
+    ml_df = ml_df.dropna(subset=feature_cols + [target]).copy()
 
-# ------------------------------------------------------------
-# ML models and hyperparameter grids
-# ------------------------------------------------------------
+    ml_train = ml_df[ml_df["PERIODE"] <= train_end].sort_values(["PERIODE", "DRS"]).reset_index(drop=True)
+    ml_test = ml_df[(ml_df["PERIODE"] >= test_start) & (ml_df["PERIODE"] <= test_end)].reset_index(drop=True)
+    X_train, y_train = ml_train[feature_cols], ml_train[target]
+    X_test, y_test = ml_test[feature_cols], ml_test[target]
+    logger.info(f"[{tag}] Train {X_train.shape} ({ml_train['PERIODE'].min():%Y-%m} -> {ml_train['PERIODE'].max():%Y-%m}) | "
+                f"Test {X_test.shape} ({ml_test['PERIODE'].min():%Y-%m} -> {ml_test['PERIODE'].max():%Y-%m})")
 
-ml_specs = {
+    categorical = ["DRS"]
+    numeric = [c for c in feature_cols if c not in categorical]
+    preprocessor = ColumnTransformer([
+        ("cat", OneHotEncoder(handle_unknown="ignore"), categorical),
+        ("num", "passthrough", numeric),
+    ])
 
-    # ============================================================
-    # RANDOM FOREST
-    # ============================================================
-    "RandomForest": {
+    splits = list(period_splits(ml_train, CV_SPLITS))
 
-        "estimator": RandomForestRegressor(
-            random_state=RANDOM_STATE,
-            n_jobs=-1
-        ),
+    # --- search both models -----------------------------------
+    results = {}
+    for name, spec in SEARCH_SPACES.items():
+        pipe = Pipeline([("preprocessor", preprocessor), ("model", clone(spec["estimator"]))])
+        best_params, cv_rmse = grid_search(name, pipe, spec["param_grid"], X_train, y_train, splits, tag)
 
-        "param_grid": {
+        logger.info(f"[{tag}] {name} best params: {best_params}")
+        logger.info(f"[{tag}] {name} refitting best model on full train + evaluating on test")
+        best = clone(pipe).set_params(**best_params).fit(X_train, y_train)
+        preds = np.maximum(best.predict(X_test), 0)
+        m = metrics(y_test, preds)
+        logger.info(f"[{tag}] {name} TEST | RMSE {m['RMSE']:.3f} | MAE {m['MAE']:.3f} | "
+                    f"sMAPE {m['sMAPE']:.2f}% | MAPE {m['MAPE']:.2f}% | R2 {m['R2']:.3f}")
+        results[name] = {"estimator": best, "preds": preds, "metrics": m,
+                         "cv_rmse": cv_rmse, "best_params": best_params}
 
-            "model__n_estimators": [
-                300,
-                500,
-                800,
-                1200
-            ],
+    # --- select best by test RMSE -----------------------------
+    best_name = min(results, key=lambda k: results[k]["metrics"]["RMSE"])
+    best = results[best_name]
+    logger.info(f"[{tag}] BEST MODEL: {best_name} (test RMSE {best['metrics']['RMSE']:.3f})")
 
-            "model__max_depth": [
-                None,
-                10,
-                15,
-                20,
-                30,
-                40
-            ],
+    # --- plots -------------------------------------------------
+    plot_dir = REGISTRY_DIR / f"Plot_{tag}_{datetime.now():%Y-%m-%d}"
+    plot_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"[{tag}] Saving plots to {plot_dir}")
+    plot_predictions(all_df, ml_test, best["preds"], best_name, target, tag, test_start, plot_dir)
 
-            "model__min_samples_split": [
-                2,
-                5,
-                10,
-                20
-            ],
+    # --- save model(s) ----------------------------------------
+    model_path = REGISTRY_DIR / f"best_ml_model_{tag}_{VERSION}.pkl"
+    with open(model_path, "wb") as f:
+        pickle.dump(best["estimator"], f)
+    logger.info(f"[{tag}] Model saved: {model_path}")
 
-            "model__min_samples_leaf": [
-                1,
-                2,
-                4,
-                8
-            ],
+    full_model_path = None
+    if REFIT_ON_ALL:
+        X_all = pd.concat([X_train, X_test], ignore_index=True)
+        y_all = pd.concat([y_train, y_test], ignore_index=True)
+        full_model = clone(best["estimator"]).fit(X_all, y_all)
+        full_model_path = REGISTRY_DIR / f"best_ml_model_{tag}_{VERSION}_full.pkl"
+        with open(full_model_path, "wb") as f:
+            pickle.dump(full_model, f)
+        logger.info(f"[{tag}] Full-data model saved: {full_model_path}")
 
-            "model__max_features": [
-                0.5,
-                0.7,
-                1.0,
-                "sqrt"
-            ],
-
-            "model__bootstrap": [
-                True,
-                False
-            ]
-        }
-    },
-
-
-    # ============================================================
-    # XGBOOST - GPU
-    # ============================================================
-    "XGBoost": {
-
-        "estimator": XGBRegressor(
-            random_state=RANDOM_STATE,
-            objective="reg:squarederror",
-
-            # GPU / CUDA
-            tree_method="hist",
-            device=XGB_DEVICE,
-
-            # Keep CPU threading moderate; the tree computation
-            # itself is performed on the GPU.
-            n_jobs=4
-        ),
-
-        "param_grid": {
-
-            "model__n_estimators": [
-                300,
-                500,
-                800,
-                1200,
-                1600
-            ],
-
-            "model__max_depth": [
-                2,
-                3,
-                4,
-                5,
-                6,
-                8,
-                10
-            ],
-
-            "model__learning_rate": [
-                0.01,
-                0.02,
-                0.03,
-                0.05,
-                0.08,
-                0.1,
-                0.15
-            ],
-
-            "model__min_child_weight": [
-                1,
-                3,
-                5,
-                10,
-                20
-            ],
-
-            "model__subsample": [
-                0.6,
-                0.7,
-                0.8,
-                0.9,
-                1.0
-            ],
-
-            "model__colsample_bytree": [
-                0.6,
-                0.7,
-                0.8,
-                0.9,
-                1.0
-            ],
-
-            "model__gamma": [
-                0,
-                0.01,
-                0.1,
-                0.3,
-                1.0
-            ],
-
-            "model__reg_alpha": [
-                0,
-                0.001,
-                0.01,
-                0.1,
-                1.0
-            ],
-
-            "model__reg_lambda": [
-                0.1,
-                0.5,
-                1,
-                2,
-                5,
-                10
-            ]
-        }
+    # --- save metadata ----------------------------------------
+    summary = {
+        "version": VERSION,
+        "tag": tag,
+        "trained_at": datetime.now().isoformat(),
+        "duration_seconds": round(time.time() - t_start, 1),
+        "target": target,
+        "best_ml_model": best_name,
+        "best_params": best["best_params"],
+        "model_path": str(model_path),
+        "full_model_path": str(full_model_path) if full_model_path else None,
+        "feature_columns": feature_cols,
+        "categorical_features": categorical,
+        "numeric_features": numeric,
+        "weather_variables": METEO_VARS,
+        "lags": LAGS,
+        "xgb_device": XGB_DEVICE,
+        "train_period": {"start": str(ml_train["PERIODE"].min()), "end": str(ml_train["PERIODE"].max())},
+        "test_period": {"start": str(ml_test["PERIODE"].min()), "end": str(ml_test["PERIODE"].max())},
+        "best_ml_metrics": {k: float(v) for k, v in best["metrics"].items()},
+        "all_ml_results": [
+            {"model": n, "cv_rmse": float(r["cv_rmse"]), **{k: float(v) for k, v in r["metrics"].items()},
+             "best_params": r["best_params"]}
+            for n, r in results.items()
+        ],
     }
-
-
-    # ============================================================
-    # LIGHTGBM - GPU
-    # ============================================================
-    # "LightGBM": {
-
-    #     "estimator": LGBMRegressor(
-    #         random_state=RANDOM_STATE,
-    #         verbose=-1,
-
-    #         # GPU. Requires a CUDA-enabled LightGBM installation.
-    #         # If your LightGBM build only supports OpenCL, change
-    #         # this to device="gpu".
-    #         device="cuda",
-
-    #         n_jobs=4
-    #     ),
-
-    #     "param_grid": {
-
-    #         "model__n_estimators": [
-    #             300,
-    #             500,
-    #             800,
-    #             1200,
-    #             1600
-    #         ],
-
-    #         "model__learning_rate": [
-    #             0.01,
-    #             0.02,
-    #             0.03,
-    #             0.05,
-    #             0.08,
-    #             0.1,
-    #             0.15
-    #         ],
-
-    #         "model__num_leaves": [
-    #             7,
-    #             15,
-    #             31,
-    #             63,
-    #             127,
-    #             255
-    #         ],
-
-    #         "model__max_depth": [
-    #             -1,
-    #             3,
-    #             5,
-    #             7,
-    #             10,
-    #             15
-    #         ],
-
-    #         "model__min_child_samples": [
-    #             5,
-    #             10,
-    #             20,
-    #             30,
-    #             50,
-    #             100
-    #         ],
-
-    #         "model__subsample": [
-    #             0.6,
-    #             0.7,
-    #             0.8,
-    #             0.9,
-    #             1.0
-    #         ],
-
-    #         "model__colsample_bytree": [
-    #             0.6,
-    #             0.7,
-    #             0.8,
-    #             0.9,
-    #             1.0
-    #         ],
-
-    #         "model__reg_alpha": [
-    #             0,
-    #             0.01,
-    #             0.1,
-    #             1.0
-    #         ],
-
-    #         "model__reg_lambda": [
-    #             0,
-    #             0.1,
-    #             1,
-    #             5,
-    #             10
-    #         ]
-    #     }
-    # },
-
-
-    # ============================================================
-    # SVR
-    # ============================================================
-    # "SVR": {
-
-    #     "estimator": SVR(),
-
-    #     "param_grid": {
-
-    #         "model__C": [
-    #             0.01,
-    #             0.1,
-    #             1,
-    #             10,
-    #             100,
-    #             300,
-    #             1000
-    #         ],
-
-    #         "model__epsilon": [
-    #             0.001,
-    #             0.01,
-    #             0.05,
-    #             0.1,
-    #             0.2,
-    #             0.5,
-    #             1.0
-    #         ],
-
-    #         "model__gamma": [
-    #             "scale",
-    #             "auto",
-    #             0.001,
-    #             0.01,
-    #             0.05,
-    #             0.1,
-    #             0.5
-    #         ],
-
-    #         "model__kernel": [
-    #             "rbf"
-    #         ]
-    #     }
-    # }
-}
-
-# ============================================================
-# GRID SEARCH
-# ============================================================
-
-ml_results = {}
-
-ml_best_estimators = {}
-
-
-for name, spec in ml_specs.items():
-
-    print("\n" + "-" * 80)
-    print(f"GRID SEARCH: {name}")
-    print("-" * 80)
-
-    if name == "XGBoost":
-        print("Training device: CUDA GPU")
-    elif name == "LightGBM":
-        print("Training device: CUDA GPU")
-    else:
-        print("Training device: CPU (standard scikit-learn implementation)")
-
-
-    # --------------------------------------------------------
-    # Pipeline
-    # --------------------------------------------------------
-
-    pipeline = Pipeline(
-        steps=[
-            (
-                "preprocessor",
-                preprocessor
-            ),
-            (
-                "model",
-                spec["estimator"]
-            )
-        ]
-    )
-
-
-    # --------------------------------------------------------
-    # GridSearchCV
-    # --------------------------------------------------------
-
-    # Do not run several GPU fits simultaneously.
-    # This is especially important on an 8 GB laptop GPU.
-    grid_n_jobs = (
-        GPU_GRID_N_JOBS
-        if name in ("XGBoost", "LightGBM")
-        else CPU_GRID_N_JOBS
-    )
-
-    grid = GridSearchCV(
-        estimator=pipeline,
-        param_grid=spec["param_grid"],
-        cv=tscv,
-        scoring="neg_root_mean_squared_error",
-        n_jobs=grid_n_jobs,
-        verbose=1
-    )
-
-
-    # --------------------------------------------------------
-    # Search
-    # --------------------------------------------------------
-
-    grid.fit(X_train, y_train)
-
-
-    # --------------------------------------------------------
-    # Best parameters
-    # --------------------------------------------------------
-
-    print(f"\n{name} best parameters:")
-
-    print(grid.best_params_)
-
-    print(
-        f"{name} best CV RMSE: "
-        f"{-grid.best_score_:.4f}"
-    )
-
-
-    # --------------------------------------------------------
-    # Evaluate best estimator on 2025 test set
-    # --------------------------------------------------------
-
-    result = evaluate_model(
-        grid.best_estimator_,
-        X_train,
-        y_train,
-        X_test,
-        y_test,
-        name
-    )
-
-
-    # --------------------------------------------------------
-    # Store results
-    # --------------------------------------------------------
-
-    ml_results[name] = result
-
-    ml_best_estimators[name] = grid.best_estimator_
+    meta_path = REGISTRY_DIR_META / f"summary_{tag}_{VERSION}.json"
+    with open(meta_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, default=str)
+    logger.info(f"[{tag}] Metadata saved: {meta_path}")
+    logger.info(f"[{tag}] Done in {fmt_secs(time.time() - t_start)}")
+    return summary
 
 
 # ============================================================
-# 14. ML MODEL COMPARISON
+# 3. RUN ALL THREE MODELS
 # ============================================================
 
-ml_results_df = (
-    pd.DataFrame(
-        [
-            {
-                key: value
-                for key, value in result.items()
-                if key not in (
-                    "model_object",
-                    "predictions"
-                )
-            }
-            for result in ml_results.values()
-        ]
-    )
-    .sort_values("RMSE")
-    .reset_index(drop=True)
-)
+logger.info("=" * 70)
+logger.info(f"STEP 2/4 - Training {len(TARGETS)} models | log file: {log_file}")
 
-
-print("\n" + "=" * 80)
-print("ML MODEL COMPARISON")
-print("=" * 80)
-
-
-print(ml_results_df.to_string(index=False))
-
+global_t0 = time.time()
+all_summaries = []
+for i, (tag, target) in enumerate(TARGETS.items(), 1):
+    logger.info(f"########## MODEL {i}/{len(TARGETS)}: {tag} ##########")
+    all_summaries.append(run_target(tag, target))
+    elapsed = time.time() - global_t0
+    logger.info(f"Overall progress: {i}/{len(TARGETS)} models | elapsed {fmt_secs(elapsed)} | "
+                f"ETA {fmt_secs(elapsed / i * (len(TARGETS) - i))}")
 
 # ============================================================
-# 15. SELECT BEST ML MODEL
+# 4. GLOBAL SUMMARY
 # ============================================================
 
-best_ml_name = (ml_results_df.iloc[0]["model"])
+logger.info("=" * 70)
+logger.info("STEP 4/4 - Final summary")
+rows = [{"model": s["tag"], "best": s["best_ml_model"], **s["best_ml_metrics"]} for s in all_summaries]
+logger.info("\n" + pd.DataFrame(rows).to_string(index=False))
 
-best_ml_result = ml_results[best_ml_name]
+with open(REGISTRY_DIR_META / f"summary_all_{VERSION}.json", "w", encoding="utf-8") as f:
+    json.dump({"version": VERSION, "trained_at": datetime.now().isoformat(),
+               "total_duration_seconds": round(time.time() - global_t0, 1),
+               "models": all_summaries}, f, indent=2, default=str)
 
-best_ml_estimator = ml_best_estimators[best_ml_name]
-
-
-print("\n" + "=" * 80)
-print("BEST MACHINE LEARNING MODEL")
-print("=" * 80)
-
-
-print(f"Best ML model: {best_ml_name}")
-
-print(f"RMSE: {best_ml_result['RMSE']:.4f}")
-
-print(f"MAE : {best_ml_result['MAE']:.4f}")
-
-print(f"sMAPE: {best_ml_result['sMAPE']:.2f}%")
-
-print(f"MAPE : {best_ml_result['MAPE']:.2f}%")
-
-print(f"R²   : {best_ml_result['R2']:.4f}")
-
-
-# ============================================================
-# 16. PLOT BEST ML MODEL PREDICTIONS
-# ============================================================
-
-print("\n" + "=" * 80)
-print("PLOT BEST ML MODEL PREDICTIONS")
-print("=" * 80)
-
-
-plot_model_predictions(
-    full_df=all_df,
-    test_df=ml_test,
-    predictions=best_ml_result["predictions"],
-    model_name=f"Best ML Model: {best_ml_name}",
-    target=target,
-    test_start=TEST_START,
-    save_plot=True
-)
-
-
-# ============================================================
-# 17. SAVE BEST ML MODEL
-# ============================================================
-
-print("\n" + "=" * 80)
-print("SAVE BEST ML MODEL")
-print("=" * 80)
-
-
-model_path = (REGISTRY_DIR /  f"best_ml_model_{VERSION}.pkl")
-
-
-with open(model_path, "wb") as f:
-    pickle.dump(best_ml_estimator, f)
-
-print("Best ML model saved to:")
-
-print(model_path)
-
-
-# ============================================================
-# 18. SAVE RESULTS / METADATA
-# ============================================================
-
-registry_snapshot = {
-
-    "version": VERSION,
-    "date": datetime.now().strftime("%Y-%m-%d"),
-    "trained_at": datetime.now().isoformat(),
-
-    "best_ml_model": best_ml_name,
-
-    # =========================
-    # MODEL CONFIGURATION
-    # =========================
-
-    "target": target,
-
-    "feature_columns": feature_cols,
-
-    "categorical_features": categorical_features,
-
-    "numeric_features": numeric_features,
-
-    "weather_variables": meteo_vars,
-
-    "lags": LAGS,
-
-    "rolling_features": [
-        "target_roll_mean_3",
-        "target_roll_mean_6"
-    ],
-
-    # =========================
-    # DATA PERIODS
-    # =========================
-
-    "train_period": {
-        "start": str(ml_train["PERIODE"].min()),
-        "end": str(ml_train["PERIODE"].max())
-    },
-
-    "test_period": {
-        "start": str(ml_test["PERIODE"].min()),
-        "end": str(ml_test["PERIODE"].max())
-    },
-
-    # =========================
-    # METRICS
-    # =========================
-
-    "best_ml_metrics": {
-        "MAE": float(best_ml_result["MAE"]),
-        "RMSE": float(best_ml_result["RMSE"]),
-        "sMAPE": float(best_ml_result["sMAPE"]),
-        "MAPE": float(best_ml_result["MAPE"]),
-        "Accuracy": float(best_ml_result["Accuracy"]),
-        "R2": float(best_ml_result["R2"])
-    },
-
-    "all_ml_results": (
-        ml_results_df.to_dict(orient="records")
-    )
-}
-
-metadata_path = (REGISTRY_DIR_META / f"summary_{VERSION}.json")
-
-
-with open(metadata_path, "w") as f:
-
-    json.dump(
-        registry_snapshot,
-        f,
-        indent=2,
-        default=str
-    )
-
-
-print("\nMetadata saved to:")
-
-print(metadata_path)
-
-
-# ============================================================
-# DONE
-# ============================================================
-
-print("\n" + "=" * 80)
-print("ML TRAINING COMPLETE")
-print("=" * 80)
-
-print(f"Best model: {best_ml_name}")
-
-print(f"Test RMSE: {best_ml_result['RMSE']:.4f}")
-
-print(f"Model file: {model_path}")
-
-print("Prediction plots have been saved.")
-
-print("\nTraining device summary:")
-print("  XGBoost  : CUDA GPU")
-print("  LightGBM : CUDA GPU (requires CUDA-enabled LightGBM)")
-print("  RandomForest / SVR: CPU")
-
-print("=" * 80)
+logger.info(f"ALL TRAINING COMPLETE in {fmt_secs(time.time() - global_t0)}")
