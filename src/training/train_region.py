@@ -1382,3 +1382,5 @@ print(f"Model file: {model_path}")
 print("Prediction plots have been saved.")
 
 print("=" * 80)
+
+# scp -P 22107 -i "$env:USERPROFILE\.ssh\id_ed25519" -r "root@69.30.85.146:/workspace/harvest_modelisation" "$env:USERPROFILE\Documents"
